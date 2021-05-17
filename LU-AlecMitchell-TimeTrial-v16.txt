@@ -1,0 +1,31 @@
+import math
+def reward_function(params):
+    
+    def direction(point1, point2):
+        return math.degrees(math.atan2(params['waypoints'][point2][1] - params['waypoints'][point1][1], params['waypoints'][point2][0] - params['waypoints'][point1][0]))
+    
+    def penalize(value, coefficient, scaling_constant, weight_constant):
+        penalty = ((value * coefficient) ** scaling_constant) * weight_constant
+        if penalty > weight_constant:
+            penalty = weight_constant
+        return penalty
+    
+    reward = 1
+    
+    reward -= penalize(params['distance_from_center'], 2 / params['track_width'], 1.2, 0.5)
+    
+    if (abs(params['steering_angle']) < 10 or params['steps'] < 12) and params['speed'] < 4:
+        reward -= penalize(4 - params['speed'], 3 / 8, 1.1, 0.1)
+    
+    reward -= penalize((params['steps'] + 15) / ((3 * params['progress']) + 30), 1.5, 0.8, 0.25)
+    
+    track_heading = abs(direction(params['closest_waypoints'][0], params['closest_waypoints'][1]) - params['heading'])
+    if track_heading > 180:
+        track_heading = 360 - track_heading
+    if track_heading > 22.5:
+        reward -= penalize(track_heading - 22.5, 1 / 67.5, 1.5, 0.15)
+    
+    if not params['all_wheels_on_track'] or reward < 1e-4:
+        reward = 1e-4
+    
+    return float(reward)

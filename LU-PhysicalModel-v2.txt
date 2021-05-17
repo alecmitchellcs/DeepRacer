@@ -1,0 +1,56 @@
+import math
+def reward_function(params):
+    
+    # Input parameters
+    all_wheels_on_track = params['all_wheels_on_track']
+    track_width = params['track_width']
+    distance_from_center = params['distance_from_center']
+    waypoints = params['waypoints']
+    closest_waypoints = params['closest_waypoints']
+    steering_angle = params['steering_angle']
+    is_left_of_center = params['is_left_of_center']
+    
+    # Returns the direction of any 2 given points on the (x, y) coordinate system
+    def direction(point1, point2, waypoints):
+        position1 = waypoints[point1]
+        position2 = waypoints[point2]
+        return math.degrees(math.atan2(position2[1] - position1[1], position2[0] - position1[0]))
+    
+    # Returns a value to be taken away from the model's reward based on given variables and constants
+    def penalize(value, coefficient, scaling_constant, weight_constant):
+        if value < 0:
+            value = 0
+        value = (((value * coefficient) ** scaling_constant) * weight_constant)
+        return value
+    
+    # Calculates the direction that the 2 closest waypoints are facing
+    track_direction = direction(closest_waypoints[0], closest_waypoints[1], waypoints)
+    
+    # Calculates the difference between the car's current heading and the direction of the track
+    track_heading = track_direction - params['heading']
+    if track_heading > 180:
+        track_heading = 360 - track_heading
+    if track_heading < -180:
+        track_heading = 360 + track_heading
+    
+    # Reward value is initialized to 1 for the sake of mathematical simplicity
+    reward = 1.0
+    
+    # Penalize reward based on current distance to the center of the track
+    reward -= penalize(distance_from_center / track_width, 2, 0.5, 0.6)
+    
+    # Penalize reward based on the difference between the car's heading and the track heading
+    reward -= penalize(abs(track_heading), 1 / 45, 2, 0.1)
+    
+    # Penalize reward if the car is turning towards the near edge of the track
+    if is_left_of_center:
+        if track_heading < 0:
+            reward -= penalize(steering_angle + 10, 1 / 40, 1.5, 0.1)
+    elif track_heading > 0:
+        reward -= penalize(-(steering_angle - 10), 1 / 40, 1.5, 0.1)
+    
+    # Penalize reward if the car does not keep all wheels on the track
+    if not all_wheels_on_track:
+        reward -= 0.2
+    
+    return float(reward)

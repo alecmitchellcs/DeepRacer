@@ -1,0 +1,112 @@
+import math
+def reward_function(params):
+    
+    # Input parameters and simple variables
+    all_wheels_on_track = params['all_wheels_on_track']
+    is_crashed = params ['is_crashed']
+    track_width = params['track_width']
+    distance_from_center = params['distance_from_center']
+    waypoints = params['waypoints']
+    closest_waypoints = params['closest_waypoints']
+    steering_angle = params['steering_angle']
+    speed = params['speed']
+    steps = params['steps']
+    progress = params['progress']
+    track_length = params['track_length']
+    is_left_of_center = params['is_left_of_center']
+    _, next_object = params['closest_objects']
+    objects_distance = params['objects_distance']
+    objects_left_of_center = params['objects_left_of_center']
+    next_object_distance = abs(objects_distance[next_object] - (progress * track_length))
+    next_object_left_of_center = objects_left_of_center[next_object]
+    
+    # Returns the direction of any 2 given points on the (x, y) coordinate system
+    def direction(point1, point2, waypoints):
+        position1 = waypoints[point1]
+        position2 = waypoints[point2]
+        return math.degrees(math.atan2(position2[1] - position1[1], position2[0] - position1[0]))
+    
+    # Returns a value to be taken away from the model's reward based on given variables and constants
+    def penalize(value, coefficient, scaling_constant, weight_constant):
+        if value < 0:
+            value = 0
+        value = (((value * coefficient) ** scaling_constant) * weight_constant)
+        return value
+    
+    # Calculates the direction that the 2 closest waypoints are facing
+    track_direction = direction(closest_waypoints[0], closest_waypoints[1], waypoints)
+    
+    # Calculates the difference between the car's current heading and the direction of the track
+    track_heading = track_direction - params['heading']
+    if track_heading > 180:
+        track_heading = 360 - track_heading
+    if track_heading < -180:
+        track_heading = 360 + track_heading
+    
+    # Determines a zone in which the car will receive penalties or not by calculating a width of the safe zone along with an ideal line based on track position and object distance
+    if next_object_distance <= 1:
+        ideal_line = (3 / 5) * (track_width / 2)
+        safe_zone = 0
+        if not next_object_left_of_center:
+            ideal_line *= -1
+    elif next_object_distance < 2:
+        ideal_line = ((3 * (2 - next_object_distance)) / 5) * (track_width / 2)
+        safe_zone = (((2 * next_object_distance) - 2) / 5) * (track_width / 2)
+        if not next_object_left_of_center:
+            ideal_line *= -1
+    else:
+        ideal_line = 0
+        safe_zone = (2 / 5) * (track_width / 2)
+    
+    
+    # Calculates an effective width of the track based on how close the next object is for the sake of reward penalization
+    effective_width = track_width - (2 * abs(ideal_line))
+    
+    # Determines how far away from the safe zone the car currently is
+    if is_left_of_center:
+        distance_ideal = -(distance_from_center) - ideal_line
+    else:
+        distance_ideal = distance_from_center - ideal_line
+    if distance_ideal > safe_zone:
+        penalty_distance =  distance_ideal - safe_zone
+    elif distance_ideal < -(safe_zone):
+        penalty_distance = distance_ideal + safe_zone
+    else:
+        penalty_distance = 0
+    
+    # Reward value is initialized to 1 for the sake of mathematical simplicity
+    reward = 1.0
+    
+    # Penalize reward based on current distance to the safe zone
+    reward -= penalize(abs(penalty_distance), 2 / (effective_width - (2 * safe_zone)), 1.5, 0.3)
+    
+    # Penalize reward based on how much below maximum speed that the car is currently moving
+    reward -= penalize(2 - speed, 1, 0.8, 0.03)
+    
+    # Penalize reward based on how much of the track has been completed over a set amount of time
+    reward -= penalize((steps + 15) / ((0.2 * progress * track_length) + 30), 1, 0.9, 0.02)
+    
+    # Penalize reward based on the difference between the car's heading and the track heading
+    reward -= penalize(abs(track_heading), 1 / 45, 2, 0.1)
+    
+    # Penalize reward if the car is turning towards the near edge of the track
+    if penalty_distance < 0:
+        if track_heading < 0:
+            reward -= penalize(steering_angle + 10, 1 / 40, 1.2, 0.1)
+    elif penalty_distance > 0:
+        if track_heading > 0:
+            reward -= penalize(-(steering_angle - 10), 1 / 40, 1.2, 0.1)
+    
+    # Penalize reward if the car is on the same side of the track as a nearby upcoming object
+    if next_object_distance <= 1:
+        if next_object_left_of_center:
+            if is_left_of_center:
+                reward -= 0.1
+        elif not is_left_of_center:
+            reward -= 0.1
+    
+    # Penalize reward if the car does not keep all wheels on the track
+    if is_crashed or not all_wheels_on_track:
+        reward -= 0.3
+    
+    return float(reward)
